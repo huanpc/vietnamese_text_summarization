@@ -42,7 +42,7 @@ def compute_2_N_grams_prob(word_1, word_2):
     if word_1_dict:
         if word_2 in word_1_dict:
             return word_1_dict[word_2]
-    return 0
+    return -1
 
 
 def remove_special_character(text):
@@ -60,8 +60,8 @@ def compress_sentence(_sentence):
     for _index, item in enumerate(t[0]):
         if item == '':
             continue
+        item = item.lower()
         if t[1][_index][0] in 'NMP':
-            item = item.lower()
             if max_likelihood_word:
                 compression_words.append(max_likelihood_word)
             compression_words.append(item)
@@ -70,13 +70,23 @@ def compress_sentence(_sentence):
             max_likelihood_word_prob = -1
         else:
             likelihood_word_prob = compute_2_N_grams_prob(previous_topic_word, item)
-            if likelihood_word_prob > max_likelihood_word_prob:
-                max_likelihood_word = item
-                max_likelihood_word_prob = likelihood_word_prob
+            # not existed in dictionary, so add anyway
+            if likelihood_word_prob < 0:
+                compression_words.append(item)
+            else:
+                if likelihood_word_prob > max_likelihood_word_prob:
+                    max_likelihood_word = item
+                    max_likelihood_word_prob = likelihood_word_prob
         if _index + 1 == len(t[0]):
             if item != compression_words[len(compression_words)-1] and item:
                 compression_words.append(item)
-    return u' '.join(compression_words)
+    sentences = ''
+    for word in compression_words:
+        if '_' in word:
+            sentences = u'%s %s' % (sentences, word.replace('_', ' '))
+        else:
+            sentences = u'%s %s' % (sentences, word)
+    return sentences
 
 
 @app.route('/summarizing', methods=['POST'])
@@ -92,7 +102,7 @@ def text_summarizing():
         compressed_sentence = compress_sentence(clean_sentence)
         compressed_sentences.append(compressed_sentence)
     print 'Result: '
-    result = u' '.join(compressed_sentences)
+    result = u'.'.join([item for item in compressed_sentences if item])
     return jsonify({"result": result})
 
 def main():
