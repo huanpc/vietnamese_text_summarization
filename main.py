@@ -28,6 +28,22 @@ def store_word_to_db(word, two_grams):
     finally:
         conn.close()
 
+def get_word_from_db(word):
+    conn = _engine.connect()
+    try:
+        result = conn.execute(u"""SELECT * FROM dictionary WHERE word='{word}';""".format(word=word))
+        if result.rowcount == 0:
+            return None
+        result = result.fetchone()
+        if result:
+            temp = json.loads(result['2_grams'])
+            return temp
+    except Exception as e:
+        print e
+        print '%s' % word
+    finally:
+        conn.close()
+
 def parse_html_string(text):
     class MyHTMLParser(HTMLParser):
         def __init__(self):
@@ -47,7 +63,7 @@ def remove_special_character(text):
     return myre.sub(u'', text)
 
 
-def compress_sentence(_sentence, _dictionary):
+def compress_sentence(_sentence):
     t = ViPosTagger.postagging(ViTokenizer.tokenize(_sentence))
     compression_words = []
     previous_topic_word = ''
@@ -62,18 +78,20 @@ def compress_sentence(_sentence, _dictionary):
             max_likelihood_word = ''
             max_likelihood_word_prob = -1
         else:
-            likelihood_word_prob = compute_2_N_grams_prob(previous_topic_word, item, _dictionary)
+            likelihood_word_prob = compute_2_N_grams_prob(previous_topic_word, item)
             if likelihood_word_prob > max_likelihood_word_prob:
                 max_likelihood_word = item
                 max_likelihood_word_prob = likelihood_word_prob
         if _index + 1 == len(t[0]):
-            compression_words.append(item)
+            if item not in compression_words:
+                compression_words.append(item)
     return u' '.join(compression_words)
 
-def compute_2_N_grams_prob(word_1, word_2, _dictionary=dict()):
-    if word_1 in _dictionary:
-        if word_2 in _dictionary[word_1]:
-            return _dictionary[word_1][word_2]
+def compute_2_N_grams_prob(word_1, word_2):
+    word_1_dict = get_word_from_db(word_1)
+    if word_1_dict:
+        if word_2 in word_1_dict:
+            return word_1_dict[word_2]
     return 0
 
 def update_2_grams(word_1, word_2, _dictionary=dict()):
@@ -87,69 +105,69 @@ def update_2_grams(word_1, word_2, _dictionary=dict()):
     else:
         _dictionary[word_1] = dict()
 
-dictionary = {}
-dataset_len = 10000
-start_time = time.time()
-print '####### Build dictionary #######'
-with open('a1.csv') as csvfile:
-    csvreader = csv.DictReader(csvfile, delimiter=',')
-    for index, row in enumerate(csvreader):
-        content = u''
-        try:
-            json_body = json.loads(row['body'])
-            for item in json_body:
-                try:
-                    if item and item['type'] == 'text':
-                        parsed_text = parse_html_string(item['content'])
-                        clean_text = remove_special_character(parsed_text)
-                        content = u'{0} {1}'.format(content, clean_text)
-                except:
-                    pass
-        except:
-            continue
-        tokens, post_tags = ViPosTagger.postagging(ViTokenizer.tokenize(content))
-        for _index, item in enumerate(tokens):
-            if _index == 0:
-                continue
-            update_2_grams(tokens[_index-1], item, dictionary)
-        print '----> %s ' % (index*100/dataset_len)
-
-with open('a2.csv') as csvfile:
-    csvreader = csv.DictReader(csvfile, delimiter=',')
-    for index, row in enumerate(csvreader):
-        content = u''
-        try:
-            json_body = json.loads(row['body'])
-            for item in json_body:
-                try:
-                    if item and item['type'] == 'text':
-                        parsed_text = parse_html_string(item['content'])
-                        clean_text = remove_special_character(parsed_text)
-                        content = u'{0} {1}'.format(content, clean_text)
-                except:
-                    pass
-        except:
-            continue
-        tokens, post_tags = ViPosTagger.postagging(ViTokenizer.tokenize(content))
-        for _index, item in enumerate(tokens):
-            if _index == 0:
-                continue
-            update_2_grams(tokens[_index-1], item, dictionary)
-        print '----> %s ' % (index*100/dataset_len)
-
-print 'Total key %s' % len(dictionary.keys())
-print 'Total time %s minutes' % ((time.time()-start_time)/60)
-print '####### Store dictionary to database #######'
-start_time = time.time()
-# with open('dict.csv', 'a') as csvfile:
-    # writer = csv.DictWriter(csvfile, fieldnames=['word', '2_grams'], delimiter=',', quoting=csv.QUOTE_ALL)
-    # writer.writeheader()
-for _word, _two_grams in dictionary.items():
-    # for row in dictionary:
-        # _word = _word.decode('utf-8')
-    store_word_to_db(_word, _two_grams)
-        # writer.writerow(row)
-print 'Total time %s minutes' % ((time.time()-start_time)/60)
+# dictionary = {}
+# dataset_len = 10000
+# start_time = time.time()
+# print '####### Build dictionary #######'
+# with open('a1.csv') as csvfile:
+#     csvreader = csv.DictReader(csvfile, delimiter=',')
+#     for index, row in enumerate(csvreader):
+#         content = u''
+#         try:
+#             json_body = json.loads(row['body'])
+#             for item in json_body:
+#                 try:
+#                     if item and item['type'] == 'text':
+#                         parsed_text = parse_html_string(item['content'])
+#                         clean_text = remove_special_character(parsed_text)
+#                         content = u'{0} {1}'.format(content, clean_text)
+#                 except:
+#                     pass
+#         except:
+#             continue
+#         tokens, post_tags = ViPosTagger.postagging(ViTokenizer.tokenize(content))
+#         for _index, item in enumerate(tokens):
+#             if _index == 0:
+#                 continue
+#             update_2_grams(tokens[_index-1], item, dictionary)
+#         print '----> %s ' % (index*100/dataset_len)
+#
+# with open('a2.csv') as csvfile:
+#     csvreader = csv.DictReader(csvfile, delimiter=',')
+#     for index, row in enumerate(csvreader):
+#         content = u''
+#         try:
+#             json_body = json.loads(row['body'])
+#             for item in json_body:
+#                 try:
+#                     if item and item['type'] == 'text':
+#                         parsed_text = parse_html_string(item['content'])
+#                         clean_text = remove_special_character(parsed_text)
+#                         content = u'{0} {1}'.format(content, clean_text)
+#                 except:
+#                     pass
+#         except:
+#             continue
+#         tokens, post_tags = ViPosTagger.postagging(ViTokenizer.tokenize(content))
+#         for _index, item in enumerate(tokens):
+#             if _index == 0:
+#                 continue
+#             update_2_grams(tokens[_index-1], item, dictionary)
+#         print '----> %s ' % (index*100/dataset_len)
+#
+# print 'Total key %s' % len(dictionary.keys())
+# print 'Total time %s minutes' % ((time.time()-start_time)/60)
+# print '####### Store dictionary to database #######'
+# start_time = time.time()
+# # with open('dict.csv', 'a') as csvfile:
+#     # writer = csv.DictWriter(csvfile, fieldnames=['word', '2_grams'], delimiter=',', quoting=csv.QUOTE_ALL)
+#     # writer.writeheader()
+# for _word, _two_grams in dictionary.items():
+#     # for row in dictionary:
+#         # _word = _word.decode('utf-8')
+#     store_word_to_db(_word, _two_grams)
+#         # writer.writerow(row)
+# print 'Total time %s minutes' % ((time.time()-start_time)/60)
 
 start_time = time.time()
 print '####### Text summarize #######'
@@ -166,7 +184,7 @@ compressed_sentences = []
 sentences = text.split('.')
 for sentence in sentences:
     clean_sentence = remove_special_character(sentence)
-    compressed_sentence = compress_sentence(clean_sentence, dictionary)
+    compressed_sentence = compress_sentence(clean_sentence)
     compressed_sentences.append(compressed_sentence)
 print 'Result: '
 print u' '.join(compressed_sentences)
