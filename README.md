@@ -1,1 +1,2 @@
-# vietnamese_text_summarization
+## Libraries
+- `pyvi` - https://pypi.python.org/pypi/pyvi
